@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Default Risk Console · Loan Underwriting</title>
+<style>
+  :root{
+    --ink:#0E1A2B; --ink-2:#16273E; --ink-line:#243B57;
+    --paper:#EEF2F7; --surface:#FFFFFF; --line:#DCE3ED;
+    --text:#14202F; --muted:#5B6B80; --faint:#8A98AC;
+    --approve:#12885B; --refer:#D08A1C; --decline:#CE3F36;
+    --accent:#0E6E86; --accent-ink:#0A5568;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --r:14px; --shadow:0 1px 2px rgba(16,32,55,.06),0 10px 30px rgba(16,32,55,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--sans); color:var(--text); background:var(--paper);
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:28px 22px 60px}
+
+  header.masthead{
+    display:flex; align-items:baseline; justify-content:space-between;
+    gap:16px; flex-wrap:wrap; margin-bottom:22px;
+  }
+  .brand{display:flex; align-items:baseline; gap:14px}
+  .brand .mark{
+    font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:.18em;
+    color:var(--accent-ink); border:1.5px solid var(--accent); border-radius:6px;
+    padding:4px 8px; transform:translateY(-2px);
+  }
+  .brand h1{font-size:20px; margin:0; letter-spacing:-.01em; font-weight:650}
+  .brand p{margin:0; color:var(--muted); font-size:13px}
+  .live{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted); font-family:var(--mono)}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--faint); box-shadow:0 0 0 3px rgba(138,152,172,.18)}
+  .dot.up{background:var(--approve); box-shadow:0 0 0 3px rgba(18,136,91,.16)}
+  .dot.down{background:var(--decline); box-shadow:0 0 0 3px rgba(206,63,54,.16)}
+
+  .grid{display:grid; grid-template-columns:380px 1fr; gap:22px; align-items:start}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+
+  /* ---- verdict panel ---- */
+  .verdict{
+    position:sticky; top:22px; background:var(--ink);
+    color:#E7EEF6; border-radius:var(--r); padding:26px 24px 22px;
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .verdict .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    color:#7E93AD; margin-bottom:14px;
+  }
+  .gauge{display:block; margin:2px auto 0; width:100%; max-width:300px}
+  .gauge .track{fill:none; stroke-width:15; stroke-linecap:butt}
+  .needle{transition:none}
+  .readout{text-align:center; margin-top:-6px}
+  .prob{
+    font-family:var(--mono); font-size:46px; font-weight:600; letter-spacing:-.02em;
+    line-height:1; color:#fff;
+  }
+  .prob .pct{font-size:22px; color:#93A6BE; margin-left:2px}
+  .prob-label{font-size:12px; color:#8598B0; letter-spacing:.04em; margin-top:6px}
+  .pill{
+    display:inline-flex; align-items:center; gap:8px; margin-top:16px;
+    font-weight:650; font-size:14px; letter-spacing:.02em;
+    padding:8px 16px; border-radius:999px; background:#22354F; color:#B9C7DA;
+    text-transform:capitalize;
+  }
+  .pill .pdot{width:9px;height:9px;border-radius:50%;background:currentColor}
+  .pill.approve{background:rgba(18,136,91,.16); color:#4BD196}
+  .pill.refer{background:rgba(208,138,28,.16); color:#F1B850}
+  .pill.decline{background:rgba(206,63,54,.18); color:#F0796F}
+  .verdict .foot{
+    margin-top:20px; padding-top:16px; border-top:1px solid var(--ink-line);
+    font-size:11.5px; color:#75899F; line-height:1.5;
+  }
+  .verdict .foot b{color:#93A6BE; font-weight:600}
+
+  /* ---- form panel ---- */
+  .form-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); overflow:hidden}
+  fieldset{border:0; margin:0; padding:20px 22px}
+  fieldset + fieldset{border-top:1px solid var(--line)}
+  legend{
+    font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent-ink); padding:0; margin-bottom:2px; font-weight:600;
+  }
+  .fields{display:grid; grid-template-columns:repeat(2,1fr); gap:14px 18px; margin-top:14px}
+  @media (max-width:560px){ .fields{grid-template-columns:1fr} }
+  .field{display:flex; flex-direction:column; gap:5px; min-width:0}
+  .field.wide{grid-column:1/-1}
+  label{font-size:12.5px; color:var(--muted); font-weight:550}
+  /* per-field guidance: "?" reveals the description the API publishes */
+  .label-row{display:flex; align-items:center; gap:6px; min-width:0}
+  .hint-btn{
+    all:unset; cursor:pointer; flex:none; width:15px; height:15px;
+    border:1px solid var(--line); border-radius:50%; color:var(--faint);
+    font-size:10px; font-weight:700; line-height:14px; text-align:center;
+  }
+  .hint-btn:hover,.hint-btn[aria-expanded="true"]{border-color:var(--accent); color:var(--accent)}
+  .hint{
+    display:none; margin:0; padding:7px 9px; font-size:11.5px; line-height:1.45;
+    color:var(--muted); background:#F6F9FC; border-left:2px solid var(--line);
+    border-radius:0 6px 6px 0;
+  }
+  .hint.show{display:block}
+  /* the business reading: which way this field pushes default risk */
+  .hint-risk{
+    display:block; margin-top:6px; padding-top:6px;
+    border-top:1px dashed var(--line); color:var(--ink-2);
+  }
+  .hint-risk b{color:var(--accent-ink); font-weight:650}
+  .badge{
+    font-family:var(--mono); font-size:9px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--accent-ink); background:rgba(14,110,134,.10);
+    border:1px solid rgba(14,110,134,.22); border-radius:4px; padding:1px 5px; flex:none;
+  }
+  .guide-note{
+    padding:12px 22px; background:#F6F9FC; border-bottom:1px solid var(--line);
+    font-size:11.5px; line-height:1.55; color:var(--muted);
+  }
+  .guide-note b{color:var(--text); font-weight:600}
+
+  /* policy bands: the approve / refer / decline rule, stated in words */
+  .policy{margin-top:18px; display:flex; flex-direction:column; gap:7px}
+  .policy-row{display:flex; align-items:baseline; gap:9px; font-size:11.5px; color:#8FA3BB}
+  .policy-row b{
+    font-family:var(--mono); font-weight:600; font-size:11px; color:#C3D2E4;
+    flex:none; min-width:58px;
+  }
+  .swatch{width:8px; height:8px; border-radius:2px; flex:none; transform:translateY(-1px)}
+  input,select{
+    font-family:inherit; font-size:14px; color:var(--text); background:#fff;
+    border:1px solid var(--line); border-radius:9px; padding:9px 11px; width:100%;
+    appearance:none; transition:border-color .12s, box-shadow .12s;
+  }
+  input:focus,select:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(14,110,134,.14)}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%235B6B80' stroke-width='1.6' stroke-linecap='round'/></svg>"); background-repeat:no-repeat; background-position:right 11px center; padding-right:30px}
+
+  .actions{display:flex; gap:12px; align-items:center; padding:18px 22px; background:#F8FAFC; border-top:1px solid var(--line)}
+  button{font-family:inherit; font-size:14px; font-weight:600; border-radius:10px; cursor:pointer; border:1px solid transparent; padding:11px 20px; transition:transform .05s, background .12s}
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent); color:#fff}
+  .btn-primary:hover{background:var(--accent-ink)}
+  .btn-ghost{background:#fff; color:var(--muted); border-color:var(--line)}
+  .btn-ghost:hover{color:var(--text)}
+  .actions .note{margin-left:auto; font-size:12px; color:var(--faint); font-family:var(--mono)}
+  button:focus-visible,a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <span class="mark">GR·40</span>
+      <div>
+        <h1>Default Risk Console</h1>
+        <p>Score a loan application against the credit-risk model.</p>
+      </div>
+    </div>
+    <div class="live"><span class="dot" id="statusDot"></span><span id="statusText">checking service…</span></div>
+  </header>
+
+  <div class="grid">
+    <!-- verdict -->
+    <section class="verdict" aria-live="polite">
+      <div class="eyebrow">Assessment</div>
+      <svg class="gauge" viewBox="0 0 200 118" role="img" aria-label="Default probability gauge">
+        <!-- zone arcs are redrawn from the server's thresholds by applyPolicy() -->
+        <path class="track" id="zoneApprove" d="M20,100 A80,80 0 0 1 75.28,23.92" stroke="#12885B"/>
+        <path class="track" id="zoneRefer" d="M75.28,23.92 A80,80 0 0 1 147.02,35.28" stroke="#D08A1C"/>
+        <path class="track" id="zoneDecline" d="M147.02,35.28 A80,80 0 0 1 180,100" stroke="#CE3F36"/>
+        <text x="20" y="113" style="fill:#6B7F98" font-size="9" text-anchor="middle">0</text>
+        <text x="100" y="14" style="fill:#6B7F98" font-size="9" text-anchor="middle">50</text>
+        <text x="180" y="113" style="fill:#6B7F98" font-size="9" text-anchor="middle">100</text>
+        <g id="needle" transform="rotate(-90 100 100)">
+          <line x1="100" y1="100" x2="100" y2="30" stroke="#EAF1F8" stroke-width="3" stroke-linecap="round"/>
+        </g>
+        <circle cx="100" cy="100" r="6.5" fill="#EAF1F8"/>
+        <circle cx="100" cy="100" r="2.6" fill="#0E1A2B"/>
+      </svg>
+      <div class="readout">
+        <div class="prob"><span id="probValue">—</span><span class="pct" id="probPct"></span></div>
+        <div class="prob-label">estimated probability of default</div>
+        <span class="pill" id="pill"><span class="pdot"></span><span id="pillText">awaiting input</span></span>
+      </div>
+      <!-- The lending rule in words. Ranges are rewritten by applyPolicy()
+           from the thresholds /health publishes, so they cannot drift. -->
+      <div class="policy" id="policyLegend">
+        <div class="policy-row">
+          <span class="swatch" style="background:#12885B"></span>
+          <b id="bandApprove">&lt; 40%</b>
+          <span>Approve — default risk within appetite.</span>
+        </div>
+        <div class="policy-row">
+          <span class="swatch" style="background:#D08A1C"></span>
+          <b id="bandRefer">40–70%</b>
+          <span>Refer — borderline, send to an underwriter.</span>
+        </div>
+        <div class="policy-row">
+          <span class="swatch" style="background:#CE3F36"></span>
+          <b id="bandDecline">≥ 70%</b>
+          <span>Decline — risk above the bank's threshold.</span>
+        </div>
+      </div>
+      <div class="foot">
+        <b>Policy</b> · <span id="policyText">decline ≥ 70% · refer ≥ 40% · else approve.</span>
+        Set in <b>config.yaml</b>; illustrative, not tuned on data. Probability is
+        P(Status=1), which assumes 1 = default. A decision aid — not an approval
+        authority, and it issues no adverse-action reason codes.
+      </div>
+    </section>
+
+    <!-- form -->
+    <form class="form-card" id="appForm" novalidate>
+      <!-- Revealed once loadGuidance() has the schema; states where the
+           reasoning comes from and how far it should be trusted. -->
+      <div class="guide-note" id="guideNote" hidden>
+        Press <b>?</b> beside any field for what it means and which way it moves
+        default risk. <span class="badge">key driver</span> marks a primary risk
+        indicator. Reasoning is from the project's <b>DATA_DICTIONARY.MD</b> —
+        compiled domain knowledge, not an official dictionary, and not effects
+        measured on this model.
+      </div>
+      <div id="formBody"></div>
+      <div class="actions">
+        <button type="submit" class="btn-primary" id="scoreBtn">Score application</button>
+        <button type="button" class="btn-ghost" id="resetBtn">Reset to sample</button>
+        <button type="button" class="btn-ghost" id="guideBtn" hidden>Explain fields</button>
+        <span class="note" id="formNote"></span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ---- field definitions (name = exact API key) ----
+const NUM = new Set(["year","loan_amount","term","property_value","income","Credit_Score","LTV","dtir1"]);
+const OPTS = {
+  loan_limit:["cf","ncf"], approv_in_adv:["nopre","pre"], loan_type:["type1","type2","type3"],
+  loan_purpose:["p1","p2","p3","p4"], Credit_Worthiness:["l1","l2"], open_credit:["nopc","opc"],
+  business_or_commercial:["b/c","nob/c"], Neg_ammortization:["neg_amm","not_neg"],
+  interest_only:["int_only","not_int"], lump_sum_payment:["lpsm","not_lpsm"],
+  construction_type:["mh","sb"], occupancy_type:["ir","pr","sr"], Secured_by:["home","land"],
+  total_units:["1U","2U","3U","4U"], "co-applicant_credit_type":["CIB","EXP"],
+  age:["<25","25-34","35-44","45-54","55-64","65-74",">74"],
+  submission_of_application:["not_inst","to_inst"], Region:["North","North-East","central","south"],
+  Security_Type:["direct","Indriect"],
+};
+const SAMPLE = {
+  year:2019, loan_limit:"cf", approv_in_adv:"nopre", loan_type:"type1", loan_purpose:"p1",
+  Credit_Worthiness:"l1", open_credit:"nopc", business_or_commercial:"nob/c", loan_amount:116500,
+  term:360, Neg_ammortization:"not_neg", interest_only:"not_int", lump_sum_payment:"not_lpsm",
+  property_value:118000, construction_type:"sb", occupancy_type:"pr", Secured_by:"home",
+  total_units:"1U", income:1740, Credit_Score:758, "co-applicant_credit_type":"CIB", age:"25-34",
+  submission_of_application:"to_inst", LTV:98.72, Region:"south", Security_Type:"direct", dtir1:45,
+};
+const LABEL = {
+  loan_amount:"Loan amount", loan_type:"Loan type", loan_purpose:"Loan purpose", loan_limit:"Loan limit",
+  term:"Term (months)", business_or_commercial:"Business / commercial", Credit_Worthiness:"Credit worthiness",
+  open_credit:"Open credit", Neg_ammortization:"Negative amortization", interest_only:"Interest only",
+  lump_sum_payment:"Lump-sum payment", approv_in_adv:"Approved in advance", submission_of_application:"Submission channel",
+  income:"Income", Credit_Score:"Credit score", "co-applicant_credit_type":"Co-applicant credit bureau",
+  age:"Applicant age band", dtir1:"Debt-to-income ratio",
+  property_value:"Property value", LTV:"Loan-to-value (%)", occupancy_type:"Occupancy type",
+  construction_type:"Construction type", Secured_by:"Secured by", total_units:"Units", Security_Type:"Security type",
+  year:"Application year", Region:"Region",
+};
+const GROUPS = [
+  ["Loan", ["loan_amount","loan_type","loan_purpose","loan_limit","term","business_or_commercial",
+            "Credit_Worthiness","open_credit","Neg_ammortization","interest_only","lump_sum_payment",
+            "approv_in_adv","submission_of_application"]],
+  ["Applicant", ["income","Credit_Score","co-applicant_credit_type","age","dtir1"]],
+  ["Property", ["property_value","LTV","occupancy_type","construction_type","Secured_by","total_units","Security_Type"]],
+  ["Context", ["year","Region"]],
+];
+
+const inputs = {};
+const hints = {};                       // name -> {btn, hint}, filled by loadGuidance()
+const formBody = document.getElementById("formBody");
+for (const [title, names] of GROUPS){
+  const fs = document.createElement("fieldset");
+  const lg = document.createElement("legend"); lg.textContent = title; fs.appendChild(lg);
+  const grid = document.createElement("div"); grid.className = "fields";
+  for (const name of names){
+    const field = document.createElement("div"); field.className = "field";
+    const id = "f_" + name.replace(/[^a-z0-9]/gi,"_");
+
+    const row = document.createElement("div"); row.className = "label-row";
+    const lab = document.createElement("label"); lab.textContent = LABEL[name] || name;
+    lab.htmlFor = id;
+
+    // Explanation of what this field means, revealed on demand so 27 of them
+    // don't bury the form. Text arrives from the API schema; the button stays
+    // hidden until it does, so nothing dangles if that fetch fails.
+    const hint = document.createElement("p");
+    hint.className = "hint"; hint.id = id + "_hint";
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "hint-btn"; btn.textContent = "?";
+    btn.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-controls", hint.id);
+    btn.setAttribute("aria-label", "What is " + (LABEL[name] || name) + "?");
+    btn.addEventListener("click", () => {
+      btn.setAttribute("aria-expanded", String(hint.classList.toggle("show")));
+    });
+    // Marks a primary risk indicator; unhidden by loadGuidance() if the
+    // schema flags this field with x_driver.
+    const badge = document.createElement("span");
+    badge.className = "badge"; badge.textContent = "key driver"; badge.hidden = true;
+
+    row.appendChild(lab); row.appendChild(btn); row.appendChild(badge);
+
+    let el;
+    if (OPTS[name]){
+      el = document.createElement("select");
+      for (const o of OPTS[name]){ const op=document.createElement("option"); op.value=o; op.textContent=o; el.appendChild(op); }
+    } else {
+      el = document.createElement("input"); el.type="number"; el.step = (name==="LTV"||name==="dtir1")?"0.01":"1";
+    }
+    el.id = id; el.value = SAMPLE[name];
+    inputs[name] = el;
+    hints[name] = {btn, hint, badge};
+    field.appendChild(row); field.appendChild(el); field.appendChild(hint);
+    grid.appendChild(field);
+  }
+  fs.appendChild(grid); formBody.appendChild(fs);
+}
+
+// ---- field guidance, pulled from the API's own schema ----
+// Written once, on the LoanApplication model in service.py: `description` says
+// what the field is, `x_risk` how it bears on default risk (from
+// DATA_DICTIONARY.MD), `x_driver` flags a primary indicator. FastAPI
+// republishes all three at /openapi.json, so the form, /docs and the dictionary
+// cannot drift apart.
+//
+// Text is written with textContent / separate nodes rather than innerHTML, so
+// schema content is never parsed as markup.
+async function loadGuidance(){
+  try{
+    const r = await fetch("/openapi.json");
+    if (!r.ok) return;
+    const doc = await r.json();
+    const props = ((doc.components||{}).schemas||{}).LoanApplication?.properties || {};
+    let found = 0;
+    for (const name in hints){
+      const spec = props[name] || {};
+      const what = spec.description, why = spec.x_risk;
+      if (!what && !why) continue;
+      const {btn, hint, badge} = hints[name];
+
+      hint.textContent = what || "";
+      if (why){
+        const risk = document.createElement("span");
+        risk.className = "hint-risk";
+        const tag = document.createElement("b");
+        tag.textContent = "Why it matters: ";
+        risk.appendChild(tag);
+        risk.appendChild(document.createTextNode(why));
+        hint.appendChild(risk);
+      }
+      btn.title = [what, why].filter(Boolean).join("\n\n");  // hover tooltip
+      btn.hidden = false;
+      badge.hidden = !spec.x_driver;
+      found++;
+    }
+    if (found){
+      document.getElementById("guideBtn").hidden = false;
+      document.getElementById("guideNote").hidden = false;
+    }
+  }catch(e){
+    // Guidance is a nicety; the form scores fine without it.
+  }
+}
+
+function fillSample(){ for (const k in SAMPLE) if (inputs[k]) inputs[k].value = SAMPLE[k]; }
+
+// ---- gauge animation ----
+const needle = document.getElementById("needle");
+const probValue = document.getElementById("probValue");
+const probPct = document.getElementById("probPct");
+const pill = document.getElementById("pill");
+const pillText = document.getElementById("pillText");
+const reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+let curPct = 0;
+
+function angleFor(pct){ return (pct - 50) * 1.8; }  // -90 .. +90
+
+// ---- policy zones, driven by the server ----
+// config.yaml owns the thresholds and /health publishes them, so the gauge
+// bands and the footer can never drift from what the API actually decides.
+const GAUGE = {cx:100, cy:100, r:80};
+function pointAt(pct){
+  const t = angleFor(pct) * Math.PI / 180;
+  return [GAUGE.cx + GAUGE.r * Math.sin(t), GAUGE.cy - GAUGE.r * Math.cos(t)];
+}
+function arcPath(fromPct, toPct){
+  const [x0,y0] = pointAt(fromPct), [x1,y1] = pointAt(toPct);
+  const largeArc = (toPct - fromPct) > 50 ? 1 : 0;   // >180deg of the dial
+  return `M${x0.toFixed(2)},${y0.toFixed(2)} A${GAUGE.r},${GAUGE.r} 0 ${largeArc} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+}
+function applyPolicy(referAt, declineAt){
+  const refer = Math.max(0, Math.min(100, referAt * 100));
+  const decline = Math.max(refer, Math.min(100, declineAt * 100));
+  document.getElementById("zoneApprove").setAttribute("d", arcPath(0, refer));
+  document.getElementById("zoneRefer").setAttribute("d", arcPath(refer, decline));
+  document.getElementById("zoneDecline").setAttribute("d", arcPath(decline, 100));
+  document.getElementById("policyText").textContent =
+    `decline ≥ ${decline.toFixed(0)}% · refer ≥ ${refer.toFixed(0)}% · else approve.`;
+  // Same numbers, restated as the bands in the legend.
+  document.getElementById("bandApprove").textContent = `< ${refer.toFixed(0)}%`;
+  document.getElementById("bandRefer").textContent =
+    `${refer.toFixed(0)}–${decline.toFixed(0)}%`;
+  document.getElementById("bandDecline").textContent = `≥ ${decline.toFixed(0)}%`;
+}
+
+function render(pct){
+  needle.setAttribute("transform", `rotate(${angleFor(pct)} 100 100)`);
+  probValue.textContent = pct.toFixed(1);
+  probPct.textContent = "%";
+}
+function setDecision(dec){
+  pill.className = "pill " + dec;
+  pillText.textContent = dec;
+}
+function animateTo(target, decision){
+  target = Math.max(0, Math.min(100, target));
+  if (reduce){ curPct = target; render(target); setDecision(decision); return; }
+  const from = curPct, dur = 650, t0 = performance.now();
+  function step(t){
+    const k = Math.min(1, (t - t0)/dur);
+    const e = 1 - Math.pow(1 - k, 3);           // ease-out cubic
+    render(from + (target - from) * e);
+    if (k < 1) requestAnimationFrame(step); else { curPct = target; setDecision(decision); }
+  }
+  requestAnimationFrame(step);
+}
+
+// ---- API calls ----
+async function checkHealth(){
+  const dot = document.getElementById("statusDot"), txt = document.getElementById("statusText");
+  try{
+    const r = await fetch("/health"); const j = await r.json();
+    dot.className = "dot up";
+    txt.textContent = j.model_artifact_present ? "service online · model loaded" : "service online · model not trained";
+    if (typeof j.refer_at === "number" && typeof j.decline_at === "number"){
+      applyPolicy(j.refer_at, j.decline_at);
+    }
+  }catch(e){ dot.className = "dot down"; txt.textContent = "service offline"; }
+}
+
+document.getElementById("appForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const note = document.getElementById("formNote");
+  const payload = {};
+  for (const k in inputs){
+    const v = inputs[k].value;
+    payload[k] = NUM.has(k) ? Number(v) : v;
+  }
+  note.textContent = "scoring…";
+  try{
+    const r = await fetch("/predict", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    if (!r.ok){
+      const detail = (await r.json().catch(()=>({}))).detail || ("HTTP " + r.status);
+      note.textContent = "";
+      pill.className = "pill decline"; pillText.textContent = "error";
+      probValue.textContent = "—"; probPct.textContent = "";
+      note.textContent = typeof detail === "string" ? detail : "invalid input";
+      return;
+    }
+    const j = await r.json();
+    note.textContent = "";
+    animateTo(j.default_probability * 100, j.decision);
+  }catch(e){
+    note.textContent = "can't reach the service — is the server running?";
+  }
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => { fillSample(); });
+
+// Expand/collapse every field explanation at once -- for reading the form
+// through the first time, rather than hunting field by field.
+document.getElementById("guideBtn").addEventListener("click", (ev) => {
+  const open = ev.target.dataset.open !== "1";
+  ev.target.dataset.open = open ? "1" : "0";
+  ev.target.textContent = open ? "Hide guidance" : "Explain fields";
+  for (const name in hints){
+    const {btn, hint} = hints[name];
+    if (btn.hidden) continue;
+    hint.classList.toggle("show", open);
+    btn.setAttribute("aria-expanded", String(open));
+  }
+});
+
+checkHealth();
+loadGuidance();
+render(0);
+</script>
+</body>
+</html>
