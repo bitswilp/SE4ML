@@ -1,0 +1,43 @@
+data:
+  raw_path: data/raw/loan_default_dataset.csv
+  target_column: Status            # VERIFIED present. Encoding 1 = default is an
+                                   # INFERENCE (dataset ships no data dictionary).
+  id_sensitive_columns: [ID, Gender]        # identifier + protected attribute -> dropped
+  leakage_columns:                          # dropped: target leakage VERIFIED on data
+    - Interest_rate_spread   # missing for 100% of defaults (missingness leakage)
+    - rate_of_interest
+    - Upfront_charges
+    - credit_type            # value 'EQUI' -> 100% default rate (category leakage)
+  test_size: 0.25
+  random_state: 42
+model:
+  artifact_path: models/model.joblib
+  rf_n_estimators: 200            # key name must match model.py's CONFIG lookup
+  selection_metric: pr_auc        # PR-AUC: the headline metric under 75/25 imbalance
+                                  # (depth is left unrestricted; class_weight
+                                  #  balancing handles the imbalance instead)
+  
+decision:                         # business policy applied to P(default)
+  decline_at: 0.70                # >= this -> decline
+  refer_at: 0.40                  # >= this (but < decline_at) -> refer to an underwriter
+                                  # below refer_at -> approve.
+                                  # Illustrative thresholds: NOT tuned on the data.
+                                  # Served via /health so the UI reads them from here.
+quality:
+  # ALL of these are tunable defaults chosen for this dataset, NOT established
+  # industry standards. Every one of them changes what the checker reports.
+  max_missing_fraction: 0.4        # per column; above this -> WARN (completeness)
+  min_target_fraction: 0.05        # minority class share; below this -> WARN
+  max_inconsistent_fraction: 0.01  # rows where LTV != loan_amount/property_value
+  ltv_tolerance_pct: 1.0           # percentage points of slack in that identity
+  credit_score_range: [300, 900]   # plausible domain; outside -> FAIL (validity)
+  leakage_min_support: 0.01        # ignore groups smaller than 1% of rows
+  leakage_rate: 0.90               # group default rate above this -> leakage WARN
+  # Population Stability Index bands. Widely used in credit-risk practice
+  # (<0.1 stable, 0.1-0.25 moderate, >0.25 significant), but conventional
+  # rules of thumb rather than a standard traceable to a primary source.
+  psi_warn: 0.10
+  psi_fail: 0.25
+  psi_bins: 10
+logging:
+  level: INFO
